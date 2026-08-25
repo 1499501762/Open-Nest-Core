@@ -3,15 +3,22 @@
 > OpenNest 联机模组抽出的**平台无关通用能力**，供其他 Iron Nest: Heavy Turret Simulator 模组开发者引用。
 > 项目：`src/OpenNestCore/`（`OpenNestCore.csproj`，net6.0，仅依赖 UnityEngine interop + Il2CppInterop，**不依赖游戏 Assembly-CSharp**）。
 
+## 更新记录
+
+- 2026-08-23 新增 `OpenNestCore.Tasks` 自定义任务框架（平台无关任务图引擎 + JSON/脚本定义 + 运行时 + 桥接契约），详见 `docs/CUSTOM_MISSION.md`。
+- 2026-08-23 新增 `OpenNestCore.UI` 原生 UI 桥接（INativeUiService + NativeUi 门面 + UGUI 工具集 UiKit），详见 `docs/NATIVE_UI.md`。
+
 ## 一、为什么用 OpenNestCore
 
-OpenNestCoop 联机模组在开发中沉淀了三类可复用能力，已抽象为独立库：
+OpenNestCoop 联机模组在开发中沉淀了五类可复用能力，已抽象为独立库：
 
 | 能力 | 命名空间 | 解决的问题 |
 |---|---|---|
 | 日志门面 | `OpenNestCore.Logging` | FPS 刷屏 / 日志字符串拼接开销 |
 | 化身扩展 API | `OpenNestCore.Avatar` | 自定义联机玩家模型 / 骨架 / 动画 |
 | AssetBundle 工具 | `OpenNestCore.Assets` | IL2CPP 下加载 AssetBundle 的封装 |
+| 自定义任务 | `OpenNestCore.Tasks` | 平台无关任务图引擎（节点/事件/目标/前置后置）+ JSON/脚本定义 + 桥接契约 |
+| 原生 UI 桥接 + UGUI 工具 | `OpenNestCore.UI` | 复用游戏原生 UI 能力（本地化/通知/ESC/主菜单/光标）+ UGUI 构建工具（IMGUI 被裁剪不可用） |
 
 **定位**：纯通用工具库，**不包含联机核心**（网络/同步/会话在 OpenNestCoop 运行时里）。任何 Unity IL2CPP 模组（即使不做联机）都能用。
 
@@ -70,7 +77,7 @@ public interface ILogger {
 
 ## 四、`OpenNestCore.Avatar` — 化身扩展 API
 
-联机运行时（OpenNestCoop）的 `PlayerSync` 负责远端玩家位置/朝向同步 + 插值；**谁渲染这个玩家**由 `IPlayerVisualProvider` 决定。别的模组可注册自定义模型。
+联机运行时（OpenNestCoop）的远端玩家位置/朝向同步 + 插值由 **V1 `PlayerSync` 与 V2 `PlayerSyncV2` 共用同一套视觉基建**；**谁渲染这个玩家**由 `IPlayerVisualProvider` 决定。别的模组可注册自定义模型。
 
 ```csharp
 using OpenNestCore.Avatar;
@@ -89,6 +96,20 @@ PlayerVisualRegistry.Register(new MyAvatar());
 // 3) 恢复默认
 PlayerVisualRegistry.Register(null);
 ```
+
+### 内置提供者（OpenNestCoop.GameSync，游戏相关）
+
+`OpenNestCore.Avatar` 只定义接口/注册表/数据结构；OpenNestCoop 自带一组**游戏相关**的内置提供者（位于 `OpenNestCoop.GameSync` 命名空间），按优先级与环境变量选择：
+
+| 提供者 | 渲染内容 | 说明 |
+|---|---|---|
+| `AnimatorAvatarVisualProvider` | AssetBundle `player.bundle` + Unity Animator | 唯一"真 3D 动画"（Humanoid 重定向/混合全交给引擎）；经 `AssetBundleIron` 加载 |
+| `ExternalModelProvider` | 外部士兵模型（glb/obj，自采样动画） | `ONC_MODEL` / `Models/oncmodel.txt` 可强制显隐 |
+| `CatCrewVisualProvider` | 克隆游戏猫船员 + 原 Animator | 真 Unity 动画（克隆模板驱动 Animator 参数） |
+| `HumanoidVisualProvider` | 程序化人形骨架（胶囊/球/方块） | 兜底默认，零外部资源 |
+| `DefaultPlayerVisualProvider` | 头球 + 防毒面罩头模 + 3D 名字标签 | 历史默认实现 |
+
+**选择逻辑**（`PlayerSync.ResolveProvider` 与 `PlayerSyncV2.ResolveProvider` 一致）：注册的 provider 始终优先 → 正常联机模式先试 `AnimatorAvatarVisualProvider`（bundle），失败回退 `ExternalModelProvider` → `CatCrewVisualProvider` → 最终 `HumanoidVisualProvider`。环境变量 `ONC_PROVIDER`（`soldier` / `cat` / `humanoid`）可选。
 
 ### `AvatarPose`（每帧传入 Update 的意图状态）
 
@@ -182,5 +203,9 @@ src/OpenNestCore/
 ├─ Logging/CoopLog.cs            （等级过滤 + 节流 + SetLogSource）
 ├─ Avatar/CrewRole.cs
 ├─ Avatar/IPlayerVisualProvider.cs（IPlayerVisualProvider + PlayerVisualRegistry + AvatarPose + PlayerAction）
-└─ Assets/AssetBundleIron.cs（AssetBundleIron：Load/Dispose/代理 API/GetUnsafeRawBundle/RepairMaterials）
+├─ Assets/AssetBundleIron.cs（AssetBundleIron：Load/Dispose/代理 API/GetUnsafeRawBundle/RepairMaterials）
+├─ Tasks/                        （自定义任务框架：OncTask/OncMissionBuilder/OncMissionRuntime/IOncMissionHost/OncJson/OncMissionIO）
+└─ UI/INativeUiService.cs        （INativeUiService 接口 + NativeUi 静态门面/注册表）
+└─ UI/UiKit.cs                   （UGUI 构建工具集：Canvas/Image/Text/Button/Input + 本地化字体）
+└─ UI/UiSpriteBank.cs            （原生 UI 图集：经 AssetBundleIron 加载 Sprite + 缓存；UiKit.MakePanel 9-slice 用）
 ```

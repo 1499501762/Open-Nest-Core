@@ -31,6 +31,10 @@
     <Reference Include="UnityEngine" HintPath="$(InteropRoot)\UnityEngine.dll" Private="false" />
     <!-- AssetBundle（加载工具） -->
     <Reference Include="UnityEngine.AssetBundleModule" HintPath="$(InteropRoot)\UnityEngine.AssetBundleModule.dll" Private="false" />
+    <!-- UGUI + TextMeshPro（UI 抽象：NativeUi 服务 + UiKit 构建工具；游戏 UI 同款，非游戏程序集） -->
+    <Reference Include="UnityEngine.UI" HintPath="$(InteropRoot)\UnityEngine.UI.dll" Private="false" />
+    <Reference Include="Unity.TextMeshPro" HintPath="$(InteropRoot)\Unity.TextMeshPro.dll" Private="false" />
+    <Reference Include="UnityEngine.UIModule" HintPath="$(InteropRoot)\UnityEngine.UIModule.dll" Private="false" />
     <!-- Il2Cpp 系统程序集（FileStream 等互操作基类） -->
     <Reference Include="Il2Cppmscorlib" HintPath="$(InteropRoot)\Il2Cppmscorlib.dll" Private="false" />
     <Reference Include="Il2CppSystem" HintPath="$(InteropRoot)\Il2CppSystem.dll" Private="false" />

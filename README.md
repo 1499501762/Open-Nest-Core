@@ -3,15 +3,21 @@
 > Platform-agnostic utilities extracted from the OpenNest co-op mod, for developers of other **Iron Nest: Heavy Turret Simulator** mods.
 > Project: `src/OpenNestCore/` (`OpenNestCore.csproj`, net6.0). Depends only on UnityEngine interop + Il2CppInterop + Il2CppSystem — **no dependency on the game's `Assembly-CSharp`**.
 
+> **Update log**:
+> - 2026-08-23 Added `OpenNestCore.Tasks` custom-mission framework (platform-agnostic task-graph engine + JSON/script definitions + runtime + bridge contract), see `docs/CUSTOM_MISSION.md`.
+> - 2026-08-23 Added `OpenNestCore.UI` native-UI bridge (`INativeUiService` + `NativeUi` facade + UGUI toolkit `UiKit`), see `docs/NATIVE_UI.md`.
+
 ## 1. Why OpenNestCore
 
-The OpenNestCoop co-op mod accumulated three reusable capabilities, now extracted into a standalone library:
+The OpenNestCoop co-op mod accumulated five reusable capabilities, now extracted into a standalone library:
 
 | Capability | Namespace | Solves |
 |---|---|---|
 | Logging facade | `OpenNestCore.Logging` | FPS spam / log string-formatting overhead |
 | Avatar extension API | `OpenNestCore.Avatar` | Custom online player models / skeletons / animations |
 | AssetBundle tooling | `OpenNestCore.Assets` | Loading AssetBundles under IL2CPP |
+| Custom missions | `OpenNestCore.Tasks` | Platform-agnostic task-graph engine (nodes/events/objectives/prereqs) + JSON/script definitions + bridge contract |
+| Native-UI bridge + UGUI toolkit | `OpenNestCore.UI` | Reuse the game's native UI (localisation/notifications/ESC/main-menu/cursor) + UGUI building blocks (IMGUI is stripped) |
 
 **Positioning**: a pure utility library — it does **not** include the co-op networking core (network/sync/session live in the OpenNestCoop runtime). Any Unity IL2CPP mod (even non-co-op) can use it.
 
@@ -68,7 +74,7 @@ public interface ILogger {
 
 ## 4. `OpenNestCore.Avatar` — Avatar extension API
 
-In the co-op runtime (OpenNestCoop), `PlayerSync` synchronizes remote player position/orientation + interpolation; **who renders the player** is decided by `IPlayerVisualProvider`. Other mods can register a custom model.
+In the co-op runtime (OpenNestCoop), remote player position/orientation sync + interpolation is shared by **V1 `PlayerSync` and V2 `PlayerSyncV2` over the same visual infrastructure**; **who renders the player** is decided by `IPlayerVisualProvider`. Other mods can register a custom model.
 
 ```csharp
 using OpenNestCore.Avatar;
@@ -87,6 +93,20 @@ PlayerVisualRegistry.Register(new MyAvatar());
 // 3) Restore default
 PlayerVisualRegistry.Register(null);
 ```
+
+### Built-in providers (`OpenNestCoop.GameSync`, game-specific)
+
+`OpenNestCore.Avatar` only defines the interface/registry/data types; OpenNestCoop ships a set of **game-specific** built-in providers (namespace `OpenNestCoop.GameSync`), chosen by priority and environment variables:
+
+| Provider | Renders | Notes |
+|---|---|---|
+| `AnimatorAvatarVisualProvider` | AssetBundle `player.bundle` + Unity Animator | The only "true 3D animation" path (Humanoid retargeting/blending left to the engine); loaded via `AssetBundleIron` |
+| `ExternalModelProvider` | External soldier model (glb/obj, self-sampled animation) | `ONC_MODEL` / `Models/oncmodel.txt` can force show/hide |
+| `CatCrewVisualProvider` | Clones the in-game cat crewman + original Animator | True Unity animation (clones a template, drives Animator params) |
+| `HumanoidVisualProvider` | Procedural humanoid skeleton (capsule/sphere/box) | Fallback default, zero external assets |
+| `DefaultPlayerVisualProvider` | Head sphere + gasmask mesh + 3D name tag | Historical default |
+
+**Selection logic** (identical in `PlayerSync.ResolveProvider` and `PlayerSyncV2.ResolveProvider`): a registered provider always wins → in normal online mode try `AnimatorAvatarVisualProvider` (bundle) first, fall back to `ExternalModelProvider` → `CatCrewVisualProvider` → finally `HumanoidVisualProvider`. Optional `ONC_PROVIDER` env var (`soldier` / `cat` / `humanoid`).
 
 ### `AvatarPose` (intent state passed into `Update` every frame)
 
@@ -180,5 +200,9 @@ src/OpenNestCore/
 ├─ Logging/CoopLog.cs             (level filtering + throttling + SetLogSource)
 ├─ Avatar/CrewRole.cs
 ├─ Avatar/IPlayerVisualProvider.cs(IPlayerVisualProvider + PlayerVisualRegistry + AvatarPose + PlayerAction)
-└─ Assets/AssetBundleIron.cs(AssetBundleIron: Load/Dispose/proxies/GetUnsafeRawBundle/RepairMaterials)
+├─ Assets/AssetBundleIron.cs(AssetBundleIron: Load/Dispose/proxies/GetUnsafeRawBundle/RepairMaterials)
+├─ Tasks/                     (custom-mission framework: OncTask/OncMissionBuilder/OncMissionRuntime/IOncMissionHost/OncJson/OncMissionIO)
+└─ UI/INativeUiService.cs     (INativeUiService interface + NativeUi static facade/registry)
+└─ UI/UiKit.cs                (UGUI building toolkit: Canvas/Image/Text/Button/Input + localised fonts)
+└─ UI/UiSpriteBank.cs         (native-UI sprite bank: loads Sprites via AssetBundleIron + cache; used by UiKit.MakePanel 9-slice)
 ```
